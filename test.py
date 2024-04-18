@@ -71,19 +71,26 @@ while True:
     # Display the cropped frame
     #cv2.imshow('Cropped Frame', cropped_frame)
 
-    # Apply background subtraction
-    fg_mask = bg_subtractor.apply(cropped_frame)
+    #convert to grayscale
+    gray_frame = cv2.cvtColor(cropped_frame, cv2.COLOR_BGR2GRAY)
+    
+    #threshold
+    retval, thr_frame = cv2.threshold(gray_frame, 5, 255, cv2.THRESH_BINARY)
 
-    # Find contours in the foreground mask
-    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Find contours
+    contours, _ = cv2.findContours(thr_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     # Iterate through contours
     for contour in contours:
         # Calculate contour area
         area = cv2.contourArea(contour)
 
+        
+
         # If contour area is above a certain threshold, draw rectangle around it
-        if area > 100:  # Adjust threshold as needed
+        if area > 300:  # Adjust threshold as needed
+            print(area)
             x, y, w, h = cv2.boundingRect(contour)
             cv2.rectangle(cropped_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
             
