@@ -1,13 +1,13 @@
 import cv2
-import pytesseract
-from PIL import Image
 import numpy as np
 
 from draw_boundaries import draw_dashed_rectangle
+from detect_menues import detect_menues
+from get_boundaries import get_menu_boundaries
+from check_duplicate_entry import duplicate_entry
 
 # Load the video
 cap = cv2.VideoCapture('H:\\Videos\\4K Video Downloader+\\[PB] LEGO Star Wars The Complete Saga Any% Speedrun in 22319.mp4')
-#cap = cv2.VideoCapture('chimkin.mp4')
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
 # Initialize background subtractor
@@ -17,7 +17,7 @@ bg_subtractor = cv2.createBackgroundSubtractorMOG2()
 
 pause = True  # Pause flag
 backwards = False
-current_frame_index = 3420  # Keep track of the current frame
+current_frame_index = 0  # Keep track of the current frame
 frame_processed = False
 
 
@@ -26,8 +26,25 @@ framerate = 30
 tcs_boundaries = (0,0,1379,779)
 grievous_boundaries = (0,0,574,432)
 ar = "16:9" #check if menu etc is on the same spots on 16:10 and 4:3, possible need to change the area calculations, if game is just stretched in obs it shouldnt matter
+starting_offset = 0 #offset, if run has a large amount of video material before the actual run
+current_frame_index = starting_offset
+cut_out = [(1030,652,1366,769)] #areas that are in the game, but dont belong to the game, this will be replaced with black to make blacksceen detection possible
+blackscreen_max_value = 9
+
+#global variables:
+start_frame = None
+loads = [] #holds tuples of start + end frames of a load
 
 
+
+    #save state from previous frame
+start_menu_visible = False
+pause_menu_visible = False
+blackscreen = False
+
+    #detectors for decisionmaking of the program
+detect_new_game_end = "" #empty, initial, characters, end
+detect_load_game_end = "" 
 
 while True:
     if not pause and not backwards: 
@@ -44,55 +61,64 @@ while True:
 
         #possible introduce timeout, does all checks only every second and possibly backtrack, only if it gets too slow with all the ocr
 
+    #blackout areas that are not native to TCS
+    for area in cut_out:
+        x1, y1, x2, y2 = area
+        frame[y1:y2, x1:x2] = [0, 0, 0]
+
     if not ret:
         print("no video found")
         break  # If no frame is returned, end the loop
 
     if not frame_processed:
     
-        #detect main menu, possibly also pause menu (detect "Extras")
-        main_menu_area = (545,430,835,485)
-        x1,y1,x2,y2 = tcs_boundaries
-        w = x2-x1
-        h = y2-y1
-        
-        m1 = (int) (0.395 * w)
-        m2 = (int) (0.551 * h)
-        m3 = (int) (0.210 * w + m1)
-        m4 = (int) (0.064 * h + m2)
+        #detect main and pause menu:        
+        main_menu_area, main_menu_area_boundaries = get_menu_boundaries(tcs_boundaries, frame)
+        detected_menu = detect_menues(tcs_boundaries, main_menu_area)
+        #check if previous frame was start menu and current isnt -> start frame or preparation of file
+        if (start_menu_visible and not detected_menu == "Main Menu"):
+            if (start_frame is None):
+                start_frame = current_frame_index
+                detect_new_game_end = "initial"
+                print(f"Start of the run detected at frame {start_frame}") #this will bug, if the current frame has a start menu and you jump to a frame that isnt
 
-        main_menu_area_boundaries = (m1,m2,m3,m4)        
-        main_menu_area = frame[m2:m4,m1:m3]
+        #write for next iteration
+        start_menu_visible = False
+        pause_menu_visible = False
+        if (detected_menu == "Main Menu"):
+            start_menu_visible = True
+        elif(detected_menu == "Pause Menu"):
+            pause_menu_visible = True
+       
 
-        #try to extract all colors near the blue of the menu
-        #convert to HSV
-        hsv = cv2.cvtColor(main_menu_area, cv2.COLOR_BGR2HSV)
+        #detect last pre-cantina blackscreen frame
+        if (detect_new_game_end != "" or detect_load_game_end != ""): 
+            #first detect blackscreen, then character icons, then again blackscreen
+            game = frame[tcs_boundaries[1]:tcs_boundaries[3],tcs_boundaries[0]:tcs_boundaries[2]]
+            game_array = np.array(game)
+            is_black = np.all(game_array <= [blackscreen_max_value, blackscreen_max_value, blackscreen_max_value])   
+            
+            if (blackscreen and not is_black and detect_new_game_end == "initial"):
+                detect_new_game_end = "characters"
 
-        # Define the lower and upper threshold for blue color
-        lower_blue = np.array([60, 35, 140]) 
-        upper_blue = np.array([180, 255, 255]) 
+            if (detect_new_game_end == "characters"):            
+                blue_character = game_array[:, :, 0] >= 200  # Blue value of 200 or higher
+                green_character = game_array[:, :, 1] >= 140  # Green value of 140 or higher
+                
+                if(np.any(blue_character & green_character)):
+                    detect_new_game_end = "end"                         
 
-        # Create a binary mask for blue regions
-        mask = cv2.inRange(hsv, lower_blue, upper_blue)
+            if (blackscreen and not is_black and detect_new_game_end == "end"):
+                new_entry = [start_frame, current_frame_index - 1, "new game load"]
+                if not duplicate_entry(loads, new_entry):
+                    loads.append(new_entry)
+                    print(new_entry)
 
-        # Apply the mask to the original image to extract blue regions
-        blue_regions = cv2.bitwise_and(main_menu_area, main_menu_area, mask=mask)
-
-        pil_main_menu_area = Image.fromarray(cv2.cvtColor(blue_regions, cv2.COLOR_BGR2RGB))
+            #print(detect_new_game_end)
+            blackscreen = is_black
 
 
-        detection = pytesseract.image_to_string(pil_main_menu_area).upper()
-        
-        if ("NEW GAME" in detection):
-            print("Main Menu detected")
-        elif (1 if "E" in detection else 0) + \
-            (1 if "X" in detection else 0) + \
-            (1 if "T" in detection else 0) + \
-            (1 if "R" in detection else 0) + \
-            (1 if "A" in detection else 0) + \
-            (1 if "S" in detection else 0) >= 4:
-            print("Pause Menu detected")
-            #print (detection)
+        #print(detected_menu)
    
             
 
@@ -136,11 +162,12 @@ while True:
 
 
     #draw all indicators for reviewer
+    indicate_color = (50,50,250)
     draw_dashed_rectangle(frame, tcs_boundaries)
 
-    draw_dashed_rectangle(frame, main_menu_area_boundaries, color=(120,120,120))
-
-
+    if start_menu_visible or pause_menu_visible:
+        draw_dashed_rectangle(frame, main_menu_area_boundaries, color=indicate_color)
+    
 
     cv2.imshow('Video Footage', frame)
 
