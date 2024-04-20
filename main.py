@@ -6,14 +6,15 @@ from detect_menues import detect_menues
 from get_boundaries import get_menu_boundaries
 from check_duplicate_entry import duplicate_entry
 from predict import predict_rta, predict_loadless
+from file_storage import get_existing_file, write_to_file
 
 # Load the video
-cap = cv2.VideoCapture('H:\\Videos\\4K Video Downloader+\\[PB] LEGO Star Wars The Complete Saga Any% Speedrun in 22319.mp4')
+path = 'H:\\Videos\\4K Video Downloader+\\[PB] LEGO Star Wars The Complete Saga Any% Speedrun in 22319.mp4'
+cap = cv2.VideoCapture(path)
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
 # Initialize background subtractor
 bg_subtractor = cv2.createBackgroundSubtractorMOG2()
-
 
 
 pause = True  # Pause flag
@@ -46,6 +47,14 @@ blackscreen = False
     #detectors for decisionmaking of the program
 detect_new_game_end = "" #empty, initial, characters, end
 detect_load_game_end = "" 
+
+
+
+
+#try to read existing file, if none is present, make a new one and open it
+save_name = path.replace('\'','_') + ".txt"
+start_frame, loads = get_existing_file(save_name)
+print (loads)
 
 while True:
     if not pause and not backwards: 
@@ -81,6 +90,7 @@ while True:
             if (start_frame is None):
                 start_frame = current_frame_index
                 detect_new_game_end = "initial"
+                write_to_file(save_name, start_frame, loads)
                 print(f"Start of the run detected at frame {start_frame}") #this will bug, if the current frame has a start menu and you jump to a frame that isnt
 
         #write for next iteration
@@ -119,15 +129,19 @@ while True:
                     new_entry = [start_frame + frame_offset, current_frame_index - 1, "new game load"]
                 if not duplicate_entry(loads, new_entry):
                     loads.append(new_entry)
+                    write_to_file(save_name, start_frame, loads)
                     print(new_entry)
 
             #print(detect_new_game_end)
             blackscreen = is_black
 
 
-        #print(detected_menu)
+        #detect level load
+
    
             
+
+
 
         frame_processed = True
     '''
