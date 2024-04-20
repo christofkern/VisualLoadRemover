@@ -5,6 +5,7 @@ from draw_boundaries import draw_dashed_rectangle
 from detect_menues import detect_menues
 from get_boundaries import get_menu_boundaries
 from check_duplicate_entry import duplicate_entry
+from predict import predict_rta, predict_loadless
 
 # Load the video
 cap = cv2.VideoCapture('H:\\Videos\\4K Video Downloader+\\[PB] LEGO Star Wars The Complete Saga Any% Speedrun in 22319.mp4')
@@ -109,7 +110,13 @@ while True:
                     detect_new_game_end = "end"                         
 
             if (blackscreen and not is_black and detect_new_game_end == "end"):
-                new_entry = [start_frame, current_frame_index - 1, "new game load"]
+                frame_offset = 0
+                if (framerate == 30):
+                    frame_offset = 17
+                else:
+                    frame_offset = 33
+                if (start_frame + frame_offset < current_frame_index - 1): #prevent backwards detection
+                    new_entry = [start_frame + frame_offset, current_frame_index - 1, "new game load"]
                 if not duplicate_entry(loads, new_entry):
                     loads.append(new_entry)
                     print(new_entry)
@@ -193,6 +200,9 @@ while True:
             frame_processed = False
             pause = True
     
+    elif key == ord('c'):
+        s, prediction =  predict_rta(start_frame, current_frame_index, framerate)        
+        print(f"RTA: {prediction}, Loadless: {predict_loadless(s, loads, framerate)}, if a load is currently happening, this will be wrong")
     elif key == ord('i'):
         print(current_frame_index)
     elif key == ord('f'):
