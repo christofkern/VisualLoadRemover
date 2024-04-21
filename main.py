@@ -2,14 +2,16 @@ import cv2
 import numpy as np
 
 from draw_boundaries import draw_dashed_rectangle
-from detect_menues import detect_menues
-from get_boundaries import get_menu_boundaries
+from detect_menues import detect_main_menu, detect_level_menu
+from get_boundaries import get_menu_boundaries, get_level_menu_boundaries_p1, get_level_menu_boundaries_p2, get_crawl_text_boundaries
 from check_duplicate_entry import duplicate_entry
 from predict import predict_rta, predict_loadless
 from file_storage import get_existing_file, write_to_file
 
 # Load the video
 path = 'H:\\Videos\\4K Video Downloader+\\[PB] LEGO Star Wars The Complete Saga Any% Speedrun in 22319.mp4'
+#path = 'H:\\Videos\\4K Video Downloader+\\level_menu_test.mkv'
+#path = 'H:\\Videos\\4K Video Downloader+\\10830 - Lego Star Wars  The Complete Saga  Free Play.mp4'
 cap = cv2.VideoCapture(path)
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
@@ -28,33 +30,33 @@ framerate = 30
 tcs_boundaries = (0,0,1379,779)
 grievous_boundaries = (0,0,574,432)
 ar = "16:9" #check if menu etc is on the same spots on 16:10 and 4:3, possible need to change the area calculations, if game is just stretched in obs it shouldnt matter
-starting_offset = 0 #offset, if run has a large amount of video material before the actual run
+starting_offset = 360 #offset, if run has a large amount of video material before the actual run
 current_frame_index = starting_offset
 cut_out = [(1030,652,1366,769)] #areas that are in the game, but dont belong to the game, this will be replaced with black to make blacksceen detection possible
 blackscreen_max_value = 9
+xbox = False #different offsets for loads
 
 #global variables:
-start_frame = None
-loads = [] #holds tuples of start + end frames of a load
+save_name = path.replace('\'','_') + ".txt"
+start_frame, loads = get_existing_file(save_name)
 
 
 
     #save state from previous frame
 start_menu_visible = False
-pause_menu_visible = False
+level_menu_visible = False
+fp_menu_visible = False
 blackscreen = False
 
     #detectors for decisionmaking of the program
-detect_new_game_end = "" #empty, initial, characters, end
-detect_load_game_end = "" 
+detect_new_game_end = "" # "", initial, characters, end: these are the phases of new game
+detect_load_game_end = "" #tbd
+level_menu_check_frame = -1
+level_menu_fp_check = False
+detect_story_load_end = False
 
 
 
-
-#try to read existing file, if none is present, make a new one and open it
-save_name = path.replace('\'','_') + ".txt"
-start_frame, loads = get_existing_file(save_name)
-print (loads)
 
 while True:
     if not pause and not backwards: 
@@ -81,12 +83,25 @@ while True:
         break  # If no frame is returned, end the loop
 
     if not frame_processed:
-    
+        #isolate tesseract detections, so we can possibly precompute multithreaded
+
         #detect main and pause menu:        
         main_menu_area, main_menu_area_boundaries = get_menu_boundaries(tcs_boundaries, frame)
-        detected_menu = detect_menues(tcs_boundaries, main_menu_area)
+        detected_main_menu = detect_main_menu(main_menu_area)
+
+        #detect level door menu:
+        level_menu_area_p1, level_menu_area_boundaries_p1 = get_level_menu_boundaries_p1(tcs_boundaries, frame)
+        level_menu_area_p2, level_menu_area_boundaries_p2 = get_level_menu_boundaries_p2(tcs_boundaries, frame)
+        detected_level_menu_p1 = detect_level_menu(level_menu_area_p1)
+        detected_level_menu_p2 = detect_level_menu(level_menu_area_p2)
+        detected_level_menu = detected_level_menu_p1 == "Story" or detected_level_menu_p2 == "Story"
+        detected_fp_menu_stage1 = detected_level_menu_p1 == "FP Stage 1" or detected_level_menu_p2 == "FP Stage 1"
+        detected_fp_menu_stage2 = detected_level_menu_p1 == "FP Stage 2" or detected_level_menu_p2 == "FP Stage 2"
+
+       
+        #detect cantina load from main menu:
         #check if previous frame was start menu and current isnt -> start frame or preparation of file
-        if (start_menu_visible and not detected_menu == "Main Menu"):
+        if (start_menu_visible and not detected_main_menu):
             if (start_frame is None):
                 start_frame = current_frame_index
                 detect_new_game_end = "initial"
@@ -94,21 +109,16 @@ while True:
                 print(f"Start of the run detected at frame {start_frame}") #this will bug, if the current frame has a start menu and you jump to a frame that isnt
 
         #write for next iteration
-        start_menu_visible = False
-        pause_menu_visible = False
-        if (detected_menu == "Main Menu"):
-            start_menu_visible = True
-        elif(detected_menu == "Pause Menu"):
-            pause_menu_visible = True
+        start_menu_visible = detected_main_menu   
        
 
         #detect last pre-cantina blackscreen frame
-        if (detect_new_game_end != "" or detect_load_game_end != ""): 
-            #first detect blackscreen, then character icons, then again blackscreen
+        if (detect_new_game_end != "" or detect_load_game_end != ""):            
+            #print(detect_new_game_end)
             game = frame[tcs_boundaries[1]:tcs_boundaries[3],tcs_boundaries[0]:tcs_boundaries[2]]
             game_array = np.array(game)
             is_black = np.all(game_array <= [blackscreen_max_value, blackscreen_max_value, blackscreen_max_value])   
-            
+            #first detect blackscreen, then character icons, then again blackscreen  
             if (blackscreen and not is_black and detect_new_game_end == "initial"):
                 detect_new_game_end = "characters"
 
@@ -120,10 +130,8 @@ while True:
                     detect_new_game_end = "end"                         
 
             if (blackscreen and not is_black and detect_new_game_end == "end"):
-                frame_offset = 0
-                if (framerate == 30):
-                    frame_offset = 17
-                else:
+                frame_offset = 17
+                if (framerate == 60):                    
                     frame_offset = 33
                 if (start_frame + frame_offset < current_frame_index - 1): #prevent backwards detection
                     new_entry = [start_frame + frame_offset, current_frame_index - 1, "new game load"]
@@ -131,16 +139,77 @@ while True:
                     loads.append(new_entry)
                     write_to_file(save_name, start_frame, loads)
                     print(new_entry)
-
-            #print(detect_new_game_end)
             blackscreen = is_black
-
-
-        #detect level load
-
-   
+            #print(detect_new_game_end)
             
 
+
+        #detect story load from cantina:
+        if (level_menu_visible and not detected_level_menu):
+            level_menu_check_frame = current_frame_index
+            level_menu_fp_check = False #this should always be false, but better save than sorry
+            #check next 1.5 seconds:
+                #if bright -> back to cantina
+                #elif during that 1.5s the fp_menu was visible -> fp selection and decision tree (tbd)
+               
+        if (level_menu_check_frame >= 0):
+            if (detected_fp_menu_stage1):
+                level_menu_fp_check = True
+                level_menu_check_frame = -1
+                # -> complete FP decision tree
+
+        
+            if (current_frame_index == int(level_menu_check_frame + framerate * 1.5)):
+                #check brightness of image
+                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)    
+                # Compute the mean pixel intensity
+                average_brightness = gray_frame.mean()
+                if (average_brightness > 1): #in my tests it was always around 0.5-0.6, cantina was around 30                    
+                    level_menu_check_frame = -1
+        if(level_menu_check_frame >= 0): #this needs to start before detect_story_load_end is true, as on good harware it will be faster than the 1.5s
+            #if we get the text, that is the first frame the timer starts again
+            crawl_text_area, crawl_text_area_boundaries = get_crawl_text_boundaries(tcs_boundaries, frame)
+            gray_frame = cv2.cvtColor(crawl_text_area, cv2.COLOR_BGR2GRAY)
+            retval, thr_frame = cv2.threshold(gray_frame, 5, 255, cv2.THRESH_BINARY)
+            contours, _ = cv2.findContours(thr_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            for contour in contours:
+                area = cv2.contourArea(contour)   
+                # If contour area is above a certain threshold, draw rectangle around it
+                if area > 150:  # This should be enough
+                    print(area)
+                    x, y, w, h = cv2.boundingRect(contour)
+                    cv2.rectangle(crawl_text_area, (x, y), (x + w, y + h), (0, 255, 0), 2) #this somehow makes it show up in the big image, but thats cool i guess     
+                    frame_offset = 18
+                    if (framerate == 60):
+                        frame_offset = 36               
+                    new_entry = [level_menu_check_frame + frame_offset, current_frame_index - 1, "story load"]
+                    level_menu_check_frame = -1
+                    if not duplicate_entry(loads, new_entry):
+                        loads.append(new_entry)
+                        write_to_file(save_name, start_frame, loads)
+                        print(new_entry)
+                    break
+            #if we dont get the text its joever, just kidding
+            game = frame[tcs_boundaries[1]:tcs_boundaries[3],tcs_boundaries[0]:tcs_boundaries[2]]
+            game_array = np.array(game)
+            is_black = np.all(game_array <= [blackscreen_max_value, blackscreen_max_value, blackscreen_max_value])               
+            if (is_black):
+                #go back 1.033s, that is 62/31frames for load end
+                frame_offset = 18
+                end_offset = 31
+                if (framerate == 60):
+                    frame_offset = 36
+                    end_offset = 62
+                new_entry = [level_menu_check_frame + frame_offset, current_frame_index - end_offset, "story load"]
+                level_menu_check_frame = -1
+                if not duplicate_entry(loads, new_entry):
+                    loads.append(new_entry)
+                    write_to_file(save_name, start_frame, loads)
+                    print(new_entry)
+            
+
+
+        level_menu_visible = detected_level_menu    
 
 
         frame_processed = True
@@ -184,15 +253,28 @@ while True:
 
     #draw all indicators for reviewer
     indicate_color = (50,50,250)
+    indicate_color_2 = (250,50,50)
+    indicate_color_3 = (50,250,50)
     draw_dashed_rectangle(frame, tcs_boundaries)
 
-    if start_menu_visible or pause_menu_visible:
+    if start_menu_visible:
         draw_dashed_rectangle(frame, main_menu_area_boundaries, color=indicate_color)
-    
-
+    if detected_level_menu_p1 == "Story":
+        draw_dashed_rectangle(frame, level_menu_area_boundaries_p1, color=indicate_color)
+    if detected_level_menu_p2 == "Story":
+        draw_dashed_rectangle(frame, level_menu_area_boundaries_p2, color=indicate_color)
+    if detected_level_menu_p1 == "FP Stage 1":
+        draw_dashed_rectangle(frame, level_menu_area_boundaries_p1, color=indicate_color_2)
+    if detected_level_menu_p2 == "FP Stage 1":
+        draw_dashed_rectangle(frame, level_menu_area_boundaries_p2, color=indicate_color_2)
+    if detected_level_menu_p1 == "FP Stage 2":
+        draw_dashed_rectangle(frame, level_menu_area_boundaries_p1, color=indicate_color_3)
+    if detected_level_menu_p2 == "FP Stage 2":
+        draw_dashed_rectangle(frame, level_menu_area_boundaries_p2, color=indicate_color_3)
     cv2.imshow('Video Footage', frame)
-
-
+    #uncomment this if need to take a screenshot of the given startframe
+    #cv2.imwrite("crawl_text.png", frame)
+    #exit()
 
     # Keyboard control
     key = cv2.waitKey(1) & 0xFF 
