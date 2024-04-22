@@ -42,6 +42,7 @@ def detect_main_menu_load(start_menu_visible, detected_main_menu, start_frame, c
             if not duplicate_entry(loads, new_entry):
                 loads.append(new_entry)
                 write_to_file(save_name, start_frame, loads)
+                detect_new_game_end = ""
                 print(new_entry)
         blackscreen = is_black
         #print(detect_new_game_end)
