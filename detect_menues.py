@@ -1,28 +1,48 @@
-import pytesseract
+import easyocr
 
+reader = easyocr.Reader(['en'])
 
 def detect_main_menu(area):
-    detection = pytesseract.image_to_string(area).upper()
+    detection = reader.readtext(area)
     #print(detection)
 
-    if ("NEW GAME" in detection):
-        #print("Main Menu detected")
-        return True
+    for box, text, confidence in detection:
+        if "NEW GAME" in text.upper():
+            return True
     return False
 
 
 def detect_level_menu(area):
-    detection = pytesseract.image_to_string(area).upper()
+    detection = reader.readtext(area)
     #print(detection)
 
-    if ("BACK" in detection and "SELECT" in detection):
+    select_detected = False
+    back_detected = False
+    exit_detected = False
+    yes_detected = False
+    no_detected = False
+
+    for box, text, confidence in detection:
+        if "SELECT" in text.upper():
+            select_detected = True
+        elif "BACK" in text.upper():
+            back_detected = True
+        elif "EXIT" in text.upper():
+            exit_detected = True
+        elif "YES" in text.upper():
+            yes_detected = True
+        elif "NO" in text.upper():
+            no_detected = True
+
+    if back_detected and select_detected:
         return "Story"
-    elif ("EXIT" in detection and "SELECT" in detection):
+    elif exit_detected and select_detected:
         return "FP Stage 1"
-    elif ("YES" in detection and "NO" in detection):
+    elif yes_detected and no_detected:
         return "FP Stage 2"
-    return ""
-    pass
+    else:
+        return ""
+
 
 
 

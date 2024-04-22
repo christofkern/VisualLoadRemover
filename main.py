@@ -33,7 +33,7 @@ tcs_boundaries = (0,0,1394,784) #gary
 grievous_boundaries = (0,0,574,432) #evan
 grievous_boundaries = (0,0,1394,784) #gary
 ar = "16:9" #check if menu etc is on the same spots on 16:10 and 4:3, possible need to change the area calculations, if game is just stretched in obs it shouldnt matter
-starting_offset = 1323 #offset, if run has a large amount of video material before the actual run
+starting_offset = 0 #offset, if run has a large amount of video material before the actual run
 current_frame_index = starting_offset
 cut_out = [] #[(1030,652,1366,769)] #areas that are in the game, but dont belong to the game, this will be replaced with black to make blacksceen detection possible
 
