@@ -56,8 +56,7 @@ def detect_main_menu_load(start_menu_visible, detected_main_menu, start_frame, c
 
 def detect_level_menu_load(level_menu_visible, detected_level_menu, level_menu_check_frame, level_menu_fp_check, current_frame_index, detected_fp_menu_stage1, 
                             framerate, frame, tcs_boundaries, xbox, crawl_text_detect_max_value, previous_centroids, current_centroids, 
-                            loads, save_name, start_frame, blackscreen_max_value):
-    #detect story load from cantina:
+                            loads, save_name, start_frame, blackscreen_max_value):    
     if (level_menu_visible and not detected_level_menu):
         level_menu_check_frame = current_frame_index
         level_menu_fp_check = False #this should always be false, but better save than sorry
@@ -84,7 +83,7 @@ def detect_level_menu_load(level_menu_visible, detected_level_menu, level_menu_c
             elif (not xbox and average_brightness > 3):                
                 level_menu_check_frame = -1
     
-    if(level_menu_check_frame >= 0): #this needs to start before detect_story_load_end is true, as on good harware it will be faster than the 1.5s
+    if(level_menu_check_frame >= 0):
         #if we get the text, that is the first frame the timer starts again
         crawl_text_area, crawl_text_area_boundaries = get_crawl_text_boundaries(tcs_boundaries, frame)
         gray_frame = cv2.cvtColor(crawl_text_area, cv2.COLOR_BGR2GRAY)

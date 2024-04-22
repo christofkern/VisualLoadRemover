@@ -60,7 +60,6 @@ detect_new_game_end = "" # "", initial, characters, end: these are the phases of
 detect_load_game_end = "" #tbd
 level_menu_check_frame = -1
 level_menu_fp_check = False
-detect_story_load_end = False
 
 
 
@@ -118,7 +117,7 @@ while True:
                                                                                     blackscreen_max_value, blackscreen, framerate)
 
         
-
+        #detect story/fp/challenge load from cantina (only story rn):
         level_menu_check_frame, level_menu_fp_check, previous_centroids, current_centroids, loads = detect_level_menu_load(level_menu_visible, detected_level_menu, level_menu_check_frame, 
                                                                                                         level_menu_fp_check, current_frame_index, detected_fp_menu_stage1, framerate, frame, 
                                                                                                         tcs_boundaries, xbox, crawl_text_detect_max_value, previous_centroids, current_centroids, 
