@@ -25,7 +25,7 @@ def detect_level_menu(area):
     for box, text, confidence in detection:
         if "SELECT" in text.upper():
             select_detected = True
-        elif "BACK" in text.upper():
+        elif "BACK" in text.upper() or "ACK" in text.upper() or "ACH" in text.upper(): #these are the known mistakes, try to improve this in the future
             back_detected = True
         elif "EXIT" in text.upper():
             exit_detected = True
