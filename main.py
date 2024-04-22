@@ -12,6 +12,7 @@ from file_storage import get_existing_file, write_to_file
 path = 'H:\\Videos\\4K Video Downloader+\\[PB] LEGO Star Wars The Complete Saga Any% Speedrun in 22319.mp4'
 #path = 'H:\\Videos\\4K Video Downloader+\\level_menu_test.mkv'
 #path = 'H:\\Videos\\4K Video Downloader+\\10830 - Lego Star Wars  The Complete Saga  Free Play.mp4'
+path = 'H:\\Videos\\4K Video Downloader+\\ULTIMATE Final Gauntlet Clutch PB.mp4'
 cap = cv2.VideoCapture(path)
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
@@ -26,15 +27,19 @@ frame_processed = False
 
 
 #setup stuff before the run
-framerate = 30
-tcs_boundaries = (0,0,1379,779)
-grievous_boundaries = (0,0,574,432)
+framerate = 60
+tcs_boundaries = (0,0,1379,779) #evan
+tcs_boundaries = (0,0,1394,784) #gary
+grievous_boundaries = (0,0,574,432) #evan
+grievous_boundaries = (0,0,1394,784) #gary
 ar = "16:9" #check if menu etc is on the same spots on 16:10 and 4:3, possible need to change the area calculations, if game is just stretched in obs it shouldnt matter
-starting_offset = 360 #offset, if run has a large amount of video material before the actual run
+starting_offset = 1323 #offset, if run has a large amount of video material before the actual run
 current_frame_index = starting_offset
-cut_out = [(1030,652,1366,769)] #areas that are in the game, but dont belong to the game, this will be replaced with black to make blacksceen detection possible
-blackscreen_max_value = 9
-xbox = False #different offsets for loads
+cut_out = [] #[(1030,652,1366,769)] #areas that are in the game, but dont belong to the game, this will be replaced with black to make blacksceen detection possible
+
+xbox = True 
+#differences: offsets for loads, after level load no blackscreen, but shift, blackscreen is also not entirely black
+blackscreen_max_value = 15 if xbox else 9
 
 #global variables:
 save_name = path.replace('\'','_') + ".txt"
@@ -47,6 +52,8 @@ start_menu_visible = False
 level_menu_visible = False
 fp_menu_visible = False
 blackscreen = False
+previous_centroids = None
+current_centroids = None
 
     #detectors for decisionmaking of the program
 detect_new_game_end = "" # "", initial, characters, end: these are the phases of new game
@@ -86,7 +93,7 @@ while True:
         #isolate tesseract detections, so we can possibly precompute multithreaded
 
         #detect main and pause menu:        
-        main_menu_area, main_menu_area_boundaries = get_menu_boundaries(tcs_boundaries, frame)
+        main_menu_area, main_menu_area_boundaries = get_menu_boundaries(tcs_boundaries, frame, xbox)
         detected_main_menu = detect_main_menu(main_menu_area)
 
         #detect level door menu:
@@ -164,19 +171,31 @@ while True:
                 gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)    
                 # Compute the mean pixel intensity
                 average_brightness = gray_frame.mean()
-                if (average_brightness > 1): #in my tests it was always around 0.5-0.6, cantina was around 30                    
+                #print(average_brightness)
+                if (xbox and average_brightness > 30): #in my tests on pc it was always around 0.5-0.6, cantina was around 30, on xbox, stars are 23.7   
                     level_menu_check_frame = -1
+                elif (not xbox and average_brightness > 1):                
+                    level_menu_check_frame = -1
+        
         if(level_menu_check_frame >= 0): #this needs to start before detect_story_load_end is true, as on good harware it will be faster than the 1.5s
             #if we get the text, that is the first frame the timer starts again
             crawl_text_area, crawl_text_area_boundaries = get_crawl_text_boundaries(tcs_boundaries, frame)
             gray_frame = cv2.cvtColor(crawl_text_area, cv2.COLOR_BGR2GRAY)
-            retval, thr_frame = cv2.threshold(gray_frame, 5, 255, cv2.THRESH_BINARY)
+            retval, thr_frame = cv2.threshold(gray_frame, blackscreen_max_value, 255, cv2.THRESH_BINARY)
             contours, _ = cv2.findContours(thr_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            for contour in contours:
+            cv2.imshow("threshold", thr_frame)
+            
+            if (xbox):
+                total_movement = 0
+                count = 0 
+                previous_centroids = current_centroids
+                current_centroids = []
+
+            for index, contour in enumerate(contours):
                 area = cv2.contourArea(contour)   
                 # If contour area is above a certain threshold, draw rectangle around it
                 if area > 150:  # This should be enough
-                    print(area)
+                    #print(area)
                     x, y, w, h = cv2.boundingRect(contour)
                     cv2.rectangle(crawl_text_area, (x, y), (x + w, y + h), (0, 255, 0), 2) #this somehow makes it show up in the big image, but thats cool i guess     
                     frame_offset = 18
@@ -188,24 +207,69 @@ while True:
                         loads.append(new_entry)
                         write_to_file(save_name, start_frame, loads)
                         print(new_entry)
-                    break
-            #if we dont get the text its joever, just kidding
-            game = frame[tcs_boundaries[1]:tcs_boundaries[3],tcs_boundaries[0]:tcs_boundaries[2]]
-            game_array = np.array(game)
-            is_black = np.all(game_array <= [blackscreen_max_value, blackscreen_max_value, blackscreen_max_value])               
-            if (is_black):
-                #go back 1.033s, that is 62/31frames for load end
-                frame_offset = 18
-                end_offset = 31
-                if (framerate == 60):
-                    frame_offset = 36
-                    end_offset = 62
-                new_entry = [level_menu_check_frame + frame_offset, current_frame_index - end_offset, "story load"]
-                level_menu_check_frame = -1
-                if not duplicate_entry(loads, new_entry):
-                    loads.append(new_entry)
-                    write_to_file(save_name, start_frame, loads)
-                    print(new_entry)
+                    break                
+            
+                if (xbox):  
+                    M = cv2.moments(contour)
+                    if M["m00"] != 0:  # Check if the denominator is not zero
+                        current_centroid = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
+                        current_centroids.append(current_centroid)
+                    else:
+                        continue  # Skip this contour if the denominator is zero
+                    if previous_centroids is not None and previous_centroids != []:
+                        closest_previous_centroid = None
+                        min_distance = float('inf')
+                        #print(previous_centroids)
+                        # Find the closest centroid from the previous frame
+                        for prev_centroid in previous_centroids:
+                            distance = np.linalg.norm(np.subtract(current_centroid, prev_centroid))
+                            #print(current_centroid, prev_centroid, distance)
+                            if distance < min_distance:                            
+                                min_distance = distance
+                                closest_previous_centroid = prev_centroid
+                            
+                        
+                        # Calculate displacement vector between centroids
+                        displacement = np.subtract(current_centroid, closest_previous_centroid)                        
+                        # Calculate movement in pixels
+                        movement = np.linalg.norm(displacement)
+                        
+                        if movement < 5:  # Filter out extreme movements
+                            total_movement += movement
+                            count += 1
+            
+                if (index == len(contours)-1):
+                    if (total_movement > 40): #normal star drift was < 20, star jump was around 70
+                        #go back 1.033s, that is 62/31frames for load end
+                        frame_offset = 18
+                        end_offset = 31
+                        if (framerate == 60):
+                            frame_offset = 36
+                            end_offset = 62
+                        new_entry = [level_menu_check_frame + frame_offset, current_frame_index - end_offset, "story load"]
+                        level_menu_check_frame = -1
+                        if not duplicate_entry(loads, new_entry):
+                            loads.append(new_entry)
+                            write_to_file(save_name, start_frame, loads)
+                            print(new_entry)
+
+            if (not xbox):      
+                game = frame[tcs_boundaries[1]:tcs_boundaries[3],tcs_boundaries[0]:tcs_boundaries[2]]
+                game_array = np.array(game)
+                is_black = np.all(game_array <= [blackscreen_max_value, blackscreen_max_value, blackscreen_max_value])               
+                if (is_black):
+                    #go back 1.033s, that is 62/31frames for load end
+                    frame_offset = 18
+                    end_offset = 31
+                    if (framerate == 60):
+                        frame_offset = 36
+                        end_offset = 62
+                    new_entry = [level_menu_check_frame + frame_offset, current_frame_index - end_offset, "story load"]
+                    level_menu_check_frame = -1
+                    if not duplicate_entry(loads, new_entry):
+                        loads.append(new_entry)
+                        write_to_file(save_name, start_frame, loads)
+                        print(new_entry)
             
 
 
@@ -273,7 +337,7 @@ while True:
         draw_dashed_rectangle(frame, level_menu_area_boundaries_p2, color=indicate_color_3)
     cv2.imshow('Video Footage', frame)
     #uncomment this if need to take a screenshot of the given startframe
-    #cv2.imwrite("crawl_text.png", frame)
+    #cv2.imwrite("garrison.png", frame)
     #exit()
 
     # Keyboard control
