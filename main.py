@@ -39,8 +39,9 @@ current_frame_index = starting_offset
 cut_out = [(1030,652,1366,769)] #areas that are in the game, but dont belong to the game, this will be replaced with black to make blacksceen detection possible
 
 xbox = False 
-#differences: offsets for loads, after level load no blackscreen, but shift, blackscreen is also not entirely black
-blackscreen_max_value = 20 if xbox else 9
+#differences: offsets for loads, after level load no blackscreen, but shift
+blackscreen_max_value = 20
+crawl_text_detect_max_value = 5 if not xbox else 10 #experiment here!
 
 #global variables:
 save_name = path.replace('\'','_') + ".txt"
@@ -118,6 +119,7 @@ while True:
                                                                                     save_name, loads, detect_new_game_end, detect_load_game_end, frame, tcs_boundaries, 
                                                                                     blackscreen_max_value, blackscreen, framerate)
 
+        
 
         #detect story load from cantina:
         if (level_menu_visible and not detected_level_menu):
@@ -136,20 +138,21 @@ while True:
         
             if (current_frame_index == int(level_menu_check_frame + framerate * 1.5)):
                 #check brightness of image
-                gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)    
+                game = frame[tcs_boundaries[1]:tcs_boundaries[3],tcs_boundaries[0]:tcs_boundaries[2]]
+                gray_frame = cv2.cvtColor(game, cv2.COLOR_BGR2GRAY)    
                 # Compute the mean pixel intensity
                 average_brightness = gray_frame.mean()
                 #print(average_brightness)
-                if (xbox and average_brightness > 30): #in my tests on pc it was always around 0.5-0.6, cantina was around 30, on xbox, stars are 23.7   
+                if (xbox and average_brightness > 30): #in my tests on pc it was always around 1.5-1.6, cantina was around 30, on xbox, stars are 23.7   
                     level_menu_check_frame = -1
-                elif (not xbox and average_brightness > 1):                
+                elif (not xbox and average_brightness > 3):                
                     level_menu_check_frame = -1
         
         if(level_menu_check_frame >= 0): #this needs to start before detect_story_load_end is true, as on good harware it will be faster than the 1.5s
             #if we get the text, that is the first frame the timer starts again
             crawl_text_area, crawl_text_area_boundaries = get_crawl_text_boundaries(tcs_boundaries, frame)
             gray_frame = cv2.cvtColor(crawl_text_area, cv2.COLOR_BGR2GRAY)
-            retval, thr_frame = cv2.threshold(gray_frame, blackscreen_max_value, 255, cv2.THRESH_BINARY)
+            retval, thr_frame = cv2.threshold(gray_frame, crawl_text_detect_max_value, 255, cv2.THRESH_BINARY)
             contours, _ = cv2.findContours(thr_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             #cv2.imshow("threshold", thr_frame)
             
@@ -224,7 +227,7 @@ while True:
             if (not xbox):      
                 game = frame[tcs_boundaries[1]:tcs_boundaries[3],tcs_boundaries[0]:tcs_boundaries[2]]
                 game_array = np.array(game)
-                is_black = np.all(game_array <= [blackscreen_max_value, blackscreen_max_value, blackscreen_max_value])             
+                is_black = np.all(game_array <= [blackscreen_max_value, blackscreen_max_value, blackscreen_max_value])   
                 if (is_black):
                     #go back 1.033s, that is 62/31frames for load end
                     frame_offset = 18
