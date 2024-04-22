@@ -1,6 +1,14 @@
 #evans bounds: h: 1380, w: 780
 #garys bounds: h: 1394, w: 784
 
+
+def get_menu_check_boundaries(tcs_boundaries, frame):
+    x1, y1, x2, y2 = tcs_boundaries
+    w, h = x2 - x1, y2 - y1
+
+    level_menu_area_boundaries = (int(0.114 * w), int(0.684 * h), int(0.164 * w + 0.114 * w), int(0.255 * h + 0.684 * h))
+    return frame[level_menu_area_boundaries[1]:level_menu_area_boundaries[3], level_menu_area_boundaries[0]:level_menu_area_boundaries[2]], level_menu_area_boundaries
+
 def get_menu_boundaries(tcs_boundaries, frame, xbox):
     x1, y1, x2, y2 = tcs_boundaries
     w, h = x2 - x1, y2 - y1

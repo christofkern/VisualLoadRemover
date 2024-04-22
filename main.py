@@ -3,7 +3,7 @@ import numpy as np
 
 from draw_boundaries import draw_dashed_rectangle
 from detect_menues import detect_main_menu, detect_level_menu
-from get_boundaries import get_menu_boundaries, get_level_menu_boundaries_p1, get_level_menu_boundaries_p2, get_crawl_text_boundaries
+from get_boundaries import get_menu_check_boundaries, get_menu_boundaries, get_level_menu_boundaries_p1, get_level_menu_boundaries_p2, get_crawl_text_boundaries
 from check_duplicate_entry import duplicate_entry
 from predict import predict_rta, predict_loadless
 from file_storage import get_existing_file, write_to_file
@@ -33,13 +33,13 @@ tcs_boundaries = (0,0,1394,784) #gary
 grievous_boundaries = (0,0,574,432) #evan
 grievous_boundaries = (0,0,1394,784) #gary
 ar = "16:9" #check if menu etc is on the same spots on 16:10 and 4:3, possible need to change the area calculations, if game is just stretched in obs it shouldnt matter
-starting_offset = 0 #offset, if run has a large amount of video material before the actual run
+starting_offset = 100 #offset, if run has a large amount of video material before the actual run
 current_frame_index = starting_offset
 cut_out = [] #[(1030,652,1366,769)] #areas that are in the game, but dont belong to the game, this will be replaced with black to make blacksceen detection possible
 
 xbox = True 
 #differences: offsets for loads, after level load no blackscreen, but shift, blackscreen is also not entirely black
-blackscreen_max_value = 15 if xbox else 9
+blackscreen_max_value = 20 if xbox else 9
 
 #global variables:
 save_name = path.replace('\'','_') + ".txt"
@@ -90,20 +90,26 @@ while True:
         break  # If no frame is returned, end the loop
 
     if not frame_processed:
-        #isolate tesseract detections, so we can possibly precompute multithreaded
+        
+        #only do some of the ocr when screen brightness is below 40
+        menu_check_frame, menu_check_frame_boundaries = get_menu_check_boundaries(tcs_boundaries, frame)
+        gray_frame = cv2.cvtColor(menu_check_frame, cv2.COLOR_BGR2GRAY)    
+        # Compute the mean pixel intensity
+        average_brightness = gray_frame.mean()
+        #print(average_brightness)
+        if (average_brightness < 20):
+            #detect main and pause menu:        
+            main_menu_area, main_menu_area_boundaries = get_menu_boundaries(tcs_boundaries, frame, xbox)
+            detected_main_menu = detect_main_menu(main_menu_area)
 
-        #detect main and pause menu:        
-        main_menu_area, main_menu_area_boundaries = get_menu_boundaries(tcs_boundaries, frame, xbox)
-        detected_main_menu = detect_main_menu(main_menu_area)
-
-        #detect level door menu:
-        level_menu_area_p1, level_menu_area_boundaries_p1 = get_level_menu_boundaries_p1(tcs_boundaries, frame)
-        level_menu_area_p2, level_menu_area_boundaries_p2 = get_level_menu_boundaries_p2(tcs_boundaries, frame)
-        detected_level_menu_p1 = detect_level_menu(level_menu_area_p1)
-        detected_level_menu_p2 = detect_level_menu(level_menu_area_p2)
-        detected_level_menu = detected_level_menu_p1 == "Story" or detected_level_menu_p2 == "Story"
-        detected_fp_menu_stage1 = detected_level_menu_p1 == "FP Stage 1" or detected_level_menu_p2 == "FP Stage 1"
-        detected_fp_menu_stage2 = detected_level_menu_p1 == "FP Stage 2" or detected_level_menu_p2 == "FP Stage 2"
+            #detect level door menu:
+            level_menu_area_p1, level_menu_area_boundaries_p1 = get_level_menu_boundaries_p1(tcs_boundaries, frame)
+            level_menu_area_p2, level_menu_area_boundaries_p2 = get_level_menu_boundaries_p2(tcs_boundaries, frame)
+            detected_level_menu_p1 = detect_level_menu(level_menu_area_p1)
+            detected_level_menu_p2 = detect_level_menu(level_menu_area_p2)
+            detected_level_menu = detected_level_menu_p1 == "Story" or detected_level_menu_p2 == "Story"
+            detected_fp_menu_stage1 = detected_level_menu_p1 == "FP Stage 1" or detected_level_menu_p2 == "FP Stage 1"
+            detected_fp_menu_stage2 = detected_level_menu_p1 == "FP Stage 2" or detected_level_menu_p2 == "FP Stage 2"
 
        
         #detect cantina load from main menu:
@@ -183,7 +189,7 @@ while True:
             gray_frame = cv2.cvtColor(crawl_text_area, cv2.COLOR_BGR2GRAY)
             retval, thr_frame = cv2.threshold(gray_frame, blackscreen_max_value, 255, cv2.THRESH_BINARY)
             contours, _ = cv2.findContours(thr_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            cv2.imshow("threshold", thr_frame)
+            #cv2.imshow("threshold", thr_frame)
             
             if (xbox):
                 total_movement = 0
@@ -320,7 +326,8 @@ while True:
     indicate_color_2 = (250,50,50)
     indicate_color_3 = (50,250,50)
     draw_dashed_rectangle(frame, tcs_boundaries)
-
+    if (average_brightness < 20):
+        draw_dashed_rectangle(frame, menu_check_frame_boundaries, color=indicate_color)
     if start_menu_visible:
         draw_dashed_rectangle(frame, main_menu_area_boundaries, color=indicate_color)
     if detected_level_menu_p1 == "Story":
@@ -335,8 +342,12 @@ while True:
         draw_dashed_rectangle(frame, level_menu_area_boundaries_p1, color=indicate_color_3)
     if detected_level_menu_p2 == "FP Stage 2":
         draw_dashed_rectangle(frame, level_menu_area_boundaries_p2, color=indicate_color_3)
+
+
+
     cv2.imshow('Video Footage', frame)
-    #uncomment this if need to take a screenshot of the given startframe
+    
+    #uncomment this if need to take a screenshot of the given startframe    
     #cv2.imwrite("garrison.png", frame)
     #exit()
 
