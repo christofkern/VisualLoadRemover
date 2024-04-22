@@ -12,7 +12,7 @@ from file_storage import get_existing_file, write_to_file
 path = 'H:\\Videos\\4K Video Downloader+\\[PB] LEGO Star Wars The Complete Saga Any% Speedrun in 22319.mp4'
 #path = 'H:\\Videos\\4K Video Downloader+\\level_menu_test.mkv'
 #path = 'H:\\Videos\\4K Video Downloader+\\10830 - Lego Star Wars  The Complete Saga  Free Play.mp4'
-path = 'H:\\Videos\\4K Video Downloader+\\ULTIMATE Final Gauntlet Clutch PB.mp4'
+#path = 'H:\\Videos\\4K Video Downloader+\\ULTIMATE Final Gauntlet Clutch PB.mp4'
 cap = cv2.VideoCapture(path)
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
@@ -27,17 +27,17 @@ frame_processed = False
 
 
 #setup stuff before the run
-framerate = 60
+framerate = 30
 tcs_boundaries = (0,0,1379,779) #evan
-tcs_boundaries = (0,0,1394,784) #gary
+#tcs_boundaries = (0,0,1394,784) #gary
 grievous_boundaries = (0,0,574,432) #evan
-grievous_boundaries = (0,0,1394,784) #gary
+#grievous_boundaries = (0,0,1394,784) #gary
 ar = "16:9" #check if menu etc is on the same spots on 16:10 and 4:3, possible need to change the area calculations, if game is just stretched in obs it shouldnt matter
-starting_offset = 100 #offset, if run has a large amount of video material before the actual run
+starting_offset = 0 #offset, if run has a large amount of video material before the actual run
 current_frame_index = starting_offset
-cut_out = [] #[(1030,652,1366,769)] #areas that are in the game, but dont belong to the game, this will be replaced with black to make blacksceen detection possible
+cut_out = [(1030,652,1366,769)] #areas that are in the game, but dont belong to the game, this will be replaced with black to make blacksceen detection possible
 
-xbox = True 
+xbox = False 
 #differences: offsets for loads, after level load no blackscreen, but shift, blackscreen is also not entirely black
 blackscreen_max_value = 20 if xbox else 9
 
@@ -244,25 +244,25 @@ while True:
                             total_movement += movement
                             count += 1
             
-                if (index == len(contours)-1):
-                    if (total_movement > 40): #normal star drift was < 20, star jump was around 70
-                        #go back 1.033s, that is 62/31frames for load end
-                        frame_offset = 18
-                        end_offset = 31
-                        if (framerate == 60):
-                            frame_offset = 36
-                            end_offset = 62
-                        new_entry = [level_menu_check_frame + frame_offset, current_frame_index - end_offset, "story load"]
-                        level_menu_check_frame = -1
-                        if not duplicate_entry(loads, new_entry):
-                            loads.append(new_entry)
-                            write_to_file(save_name, start_frame, loads)
-                            print(new_entry)
+                    if (index == len(contours)-1):
+                        if (total_movement > 40): #normal star drift was < 20, star jump was around 70
+                            #go back 1.033s, that is 62/31frames for load end
+                            frame_offset = 18
+                            end_offset = 31
+                            if (framerate == 60):
+                                frame_offset = 36
+                                end_offset = 62
+                            new_entry = [level_menu_check_frame + frame_offset, current_frame_index - end_offset, "story load"]
+                            level_menu_check_frame = -1
+                            if not duplicate_entry(loads, new_entry):
+                                loads.append(new_entry)
+                                write_to_file(save_name, start_frame, loads)
+                                print(new_entry)
 
             if (not xbox):      
                 game = frame[tcs_boundaries[1]:tcs_boundaries[3],tcs_boundaries[0]:tcs_boundaries[2]]
                 game_array = np.array(game)
-                is_black = np.all(game_array <= [blackscreen_max_value, blackscreen_max_value, blackscreen_max_value])               
+                is_black = np.all(game_array <= [blackscreen_max_value, blackscreen_max_value, blackscreen_max_value])             
                 if (is_black):
                     #go back 1.033s, that is 62/31frames for load end
                     frame_offset = 18
