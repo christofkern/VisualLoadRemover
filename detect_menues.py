@@ -25,13 +25,21 @@ def detect_level_menu(area):
     for box, text, confidence in detection:
         if "SELECT" in text.upper():
             select_detected = True
-        elif "BACK" in text.upper() or "ACK" in text.upper() or "ACH" in text.upper(): #these are the known mistakes, try to improve this in the future
+        elif ("BACK" in text.upper() or "ACK" in text.upper() or "ACH" in text.upper()  #these are the known mistakes in english, try to improve this in the future
+            or "RETOUR" in text.upper() or "RETOUT" in text.upper() #french  
+            ):
             back_detected = True
-        elif "EXIT" in text.upper():
+        elif ("EXIT" in text.upper()
+            or "QUITTER" in text.upper() or "QULTTER" in text.upper() #french
+            ):
             exit_detected = True
-        elif "YES" in text.upper():
+        elif ("YES" in text.upper()
+            or "OUI" in text.upper()
+            ):
             yes_detected = True
-        elif "NO" in text.upper():
+        elif ("NO" in text.upper() #english
+            or "NON" in text.upper() #french
+            ):
             no_detected = True
 
     if back_detected and select_detected:

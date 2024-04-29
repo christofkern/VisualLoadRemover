@@ -14,9 +14,6 @@ def get_existing_file(filename):
             for line in file:
                 parts = line.split(',')                
                 loads.append((int(parts[0][1:]),int(parts[1]), parts[2][2:-3]))
-
-            if not any(load[2] == "new game load" for load in loads): #this is necessary, as the new game load can only be detected in combination with setting the start frame
-                starting_frame = None
             return starting_frame, loads
     return None, []
 

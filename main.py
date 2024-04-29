@@ -2,16 +2,16 @@ import cv2
 
 from draw_boundaries import draw_dashed_rectangle
 from detect_menues import detect_main_menu, detect_level_menu
-from get_boundaries import get_menu_check_boundaries, get_menu_boundaries, get_level_menu_boundaries_p1, get_level_menu_boundaries_p2
+from get_boundaries import get_brightness_check_boundaries, get_menu_boundaries, get_level_menu_boundaries_p1, get_level_menu_boundaries_p2
 from predict import predict_rta, predict_loadless
 from file_storage import get_existing_file
 from detect_loads import detect_main_menu_load, detect_level_menu_load
 
 # Load the video
-path = 'H:\\Videos\\4K Video Downloader+\\[PB] LEGO Star Wars The Complete Saga Any% Speedrun in 22319.mp4'
+#path = 'H:\\Videos\\4K Video Downloader+\\[PB] LEGO Star Wars The Complete Saga Any% Speedrun in 22319.mp4'
 #path = 'H:\\Videos\\4K Video Downloader+\\level_menu_test.mkv'
-#path = 'H:\\Videos\\4K Video Downloader+\\10830 - Lego Star Wars  The Complete Saga  Free Play.mp4'
-path = 'H:\\Videos\\4K Video Downloader+\\ULTIMATE Final Gauntlet Clutch PB.mp4'
+path = 'H:\\Videos\\4K Video Downloader+\\10830 - Lego Star Wars  The Complete Saga  Free Play.mp4'
+#path = 'H:\\Videos\\4K Video Downloader+\\ULTIMATE Final Gauntlet Clutch PB.mp4'
 cap = cv2.VideoCapture(path)
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
@@ -27,17 +27,19 @@ frame_processed = False
 
 #setup stuff before the run
 framerate = 60
-tcs_boundaries = (0,0,1379,779) #evan
-tcs_boundaries = (0,0,1394,784) #gary
+#tcs_boundaries = (0,0,1379,779) #evan
+#tcs_boundaries = (0,0,1394,784) #gary
+tcs_boundaries = (325,96,1884,979) #rapho
 grievous_boundaries = (0,0,574,432) #evan
-grievous_boundaries = (0,0,1394,784) #gary
+#grievous_boundaries = (0,0,1394,784) #gary
+grievous_boundaries = (325,96,1884,979) #rapho
 ar = "16:9" #check if menu etc is on the same spots on 16:10 and 4:3, possible need to change the area calculations, if game is just stretched in obs it shouldnt matter
-starting_offset = 0 #offset, if run has a large amount of video material before the actual run
+starting_offset = 2021 #offset, if run has a large amount of video material before the actual run
 current_frame_index = starting_offset
 cut_out = []#[(1030,652,1366,769)] #areas that are in the game, but dont belong to the game, this will be replaced with black to make blacksceen detection possible
 
-xbox = True 
-#differences: offsets for loads, after level load no blackscreen, but shift
+xbox = False 
+#differences: offsets for loads, after level load no blackscreen, but star shift, different colors possibly
 blackscreen_max_value = 20
 crawl_text_detect_max_value = 5 if not xbox else 10 #experiment here!
 
@@ -60,7 +62,8 @@ detect_new_game_end = "" # "", initial, characters, end: these are the phases of
 detect_load_game_end = "" #tbd
 level_menu_check_frame = -1
 level_menu_fp_check = False
-
+level_menu_fp_frame_history = []
+fp_load_indicator_frame = -1
 
 
 
@@ -91,7 +94,7 @@ while True:
     if not frame_processed:
         
         #only do some of the ocr when screen brightness is below 40
-        menu_check_frame, menu_check_frame_boundaries = get_menu_check_boundaries(tcs_boundaries, frame)
+        menu_check_frame, menu_check_frame_boundaries = get_brightness_check_boundaries(tcs_boundaries, frame)
         gray_frame = cv2.cvtColor(menu_check_frame, cv2.COLOR_BGR2GRAY)    
         # Compute the mean pixel intensity
         average_brightness = gray_frame.mean()
@@ -110,22 +113,24 @@ while True:
             detected_fp_menu_stage1 = detected_level_menu_p1 == "FP Stage 1" or detected_level_menu_p2 == "FP Stage 1"
             detected_fp_menu_stage2 = detected_level_menu_p1 == "FP Stage 2" or detected_level_menu_p2 == "FP Stage 2"
 
-       
-        #detect cantina load from main menu:
-        start_menu_visible, blackscreen, loads, start_frame, detect_new_game_end = detect_main_menu_load(start_menu_visible, detected_main_menu, start_frame, current_frame_index, 
+            #detect cantina load from main menu:
+            start_menu_visible, blackscreen, loads, start_frame, detect_new_game_end = detect_main_menu_load(start_menu_visible, detected_main_menu, start_frame, current_frame_index, 
                                                                                     save_name, loads, detect_new_game_end, detect_load_game_end, frame, tcs_boundaries, 
                                                                                     blackscreen_max_value, blackscreen, framerate)
 
-        
-        #detect story/fp/challenge load from cantina (only story rn):
-        level_menu_check_frame, level_menu_fp_check, previous_centroids, current_centroids, loads = detect_level_menu_load(level_menu_visible, detected_level_menu, level_menu_check_frame, 
-                                                                                                        level_menu_fp_check, current_frame_index, detected_fp_menu_stage1, framerate, frame, 
-                                                                                                        tcs_boundaries, xbox, crawl_text_detect_max_value, previous_centroids, current_centroids, 
-                                                                                                        loads, save_name, start_frame, blackscreen_max_value)
+            
+            #detect story/fp/challenge load from cantina (only story rn):
+            level_menu_check_frame, fp_load_indicator_frame, level_menu_fp_check, previous_centroids, current_centroids, loads = detect_level_menu_load(level_menu_visible, detected_level_menu, 
+                                            level_menu_check_frame, fp_load_indicator_frame, level_menu_fp_check, current_frame_index, detected_fp_menu_stage1, framerate, frame, 
+                                            level_menu_fp_frame_history, tcs_boundaries, xbox, crawl_text_detect_max_value, previous_centroids, current_centroids, loads, save_name, 
+                                            start_frame, blackscreen_max_value)
             
 
 
-        level_menu_visible = detected_level_menu    
+                
+
+
+            level_menu_visible = detected_level_menu    
 
 
         frame_processed = True
@@ -172,29 +177,30 @@ while True:
     indicate_color_2 = (250,50,50)
     indicate_color_3 = (50,250,50)
     draw_dashed_rectangle(frame, tcs_boundaries)
+
     if (average_brightness < 20):
         draw_dashed_rectangle(frame, menu_check_frame_boundaries, color=indicate_color)
-    if start_menu_visible:
-        draw_dashed_rectangle(frame, main_menu_area_boundaries, color=indicate_color)
-    if detected_level_menu_p1 == "Story":
-        draw_dashed_rectangle(frame, level_menu_area_boundaries_p1, color=indicate_color)
-    if detected_level_menu_p2 == "Story":
-        draw_dashed_rectangle(frame, level_menu_area_boundaries_p2, color=indicate_color)
-    if detected_level_menu_p1 == "FP Stage 1":
-        draw_dashed_rectangle(frame, level_menu_area_boundaries_p1, color=indicate_color_2)
-    if detected_level_menu_p2 == "FP Stage 1":
-        draw_dashed_rectangle(frame, level_menu_area_boundaries_p2, color=indicate_color_2)
-    if detected_level_menu_p1 == "FP Stage 2":
-        draw_dashed_rectangle(frame, level_menu_area_boundaries_p1, color=indicate_color_3)
-    if detected_level_menu_p2 == "FP Stage 2":
-        draw_dashed_rectangle(frame, level_menu_area_boundaries_p2, color=indicate_color_3)
+        if start_menu_visible:
+            draw_dashed_rectangle(frame, main_menu_area_boundaries, color=indicate_color)
+        if detected_level_menu_p1 == "Story":
+            draw_dashed_rectangle(frame, level_menu_area_boundaries_p1, color=indicate_color)
+        if detected_level_menu_p2 == "Story":
+            draw_dashed_rectangle(frame, level_menu_area_boundaries_p2, color=indicate_color)
+        if detected_level_menu_p1 == "FP Stage 1":
+            draw_dashed_rectangle(frame, level_menu_area_boundaries_p1, color=indicate_color_2)
+        if detected_level_menu_p2 == "FP Stage 1":
+            draw_dashed_rectangle(frame, level_menu_area_boundaries_p2, color=indicate_color_2)
+        if detected_level_menu_p1 == "FP Stage 2":
+            draw_dashed_rectangle(frame, level_menu_area_boundaries_p1, color=indicate_color_3)
+        if detected_level_menu_p2 == "FP Stage 2":
+            draw_dashed_rectangle(frame, level_menu_area_boundaries_p2, color=indicate_color_3)
 
 
 
     cv2.imshow('Video Footage', frame)
     
     #uncomment this if need to take a screenshot of the given startframe    
-    #cv2.imwrite("garrison.png", frame)
+    #cv2.imwrite("rapho.png", frame)
     #exit()
 
     # Keyboard control
